@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  # 服務一：OpenSearch 資料庫
+  opensearch:
+    image: opensearchproject/opensearch:2.15.0 # 使用官方 OpenSearch 映像檔，建議指定版本
+    hostname: opensearch
+    restart: always
+    environment:
+      - cluster.name=wazuh-cluster
+      - node.name=opensearch-1
+      - discovery.type=single-node # 設定為單節點模式，適合單機部署
+      - bootstrap.memory_lock=true # 鎖定記憶體，提升性能
+      - "OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g" # 設定 JVM 記憶體，建議至少 1GB
+      - "DISABLE_SECURITY_PLUGIN=false" # 啟用安全性插件，非常重要！
+      - "OPENSEARCH_SECURITY_ADMIN_PASSWORD=YourSecureAdminPassword!" # 設定 admin 帳號的密碼，請務必修改！
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - /home/Wazuh/opensearch_data:/usr/share/opensearch/data # 掛載資料目錄
+    ports:
+      - "9200:9200" # OpenSearch API port
+      - "9600:9600" # 效能分析器 port
+    networks:
+      - wazuh-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -k -u admin:YourSecureAdminPassword! 'https://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # 服務二：Wazuh Manager
+  wazuh-manager:
+    image: wazuh/wazuh-manager:4.7.4
+    hostname: wazuh-manager
+    restart: always
+    depends_on: # 設定依賴關係，確保 OpenSearch 健康後再啟動
+      opensearch:
+        condition: service_healthy
+    environment:
+      # --- 指向我們自己建立的 opensearch 服務 ---
+      - INDEXER_URL=https://opensearch:9200
+      - INDEXER_USERNAME=admin # 使用 OpenSearch 的 admin 帳號
+      - INDEXER_PASSWORD=YourSecureAdminPassword! # 使用上面設定的密碼
+      - INDEXER_SSL_VERIFY=false # 因為是內部自簽憑證，所以關閉校驗
+    ports:
+      - "1514:1514/udp"
+      - "1515:1515/tcp"
+      - "55000:55000/tcp"
+    volumes:
+      # --- 掛載主機目錄 ---
+      - /home/Wazuh/manager_etc:/var/ossec/etc
+      - /home/Wazuh/manager_logs:/var/ossec/logs
+      - /home/Wazuh/manager_queue:/var/ossec/queue
+    networks:
+      - wazuh-net
+
+  # 服務三：Wazuh Dashboard
+  wazuh-dashboard:
+    image: wazuh/wazuh-dashboard:4.7.4
+    hostname: wazuh-dashboard
+    restart: always
+    depends_on: # 依賴 opensearch 和 wazuh-manager
+      opensearch:
+        condition: service_healthy
+      wazuh-manager:
+        condition: service_started
+    environment:
+      # --- 指向我們自己建立的 opensearch 服務 ---
+      - OPENSEARCH_HOSTS=["https://opensearch:9200"]
+      - WAZUH_API_URL=https://wazuh-manager # 指向 wazuh-manager
+      # --- 這是登入 Dashboard 網頁的帳號密碼，可自行設定 ---
+      - OPENSEARCH_USERNAME=admin
+      - OPENSEARCH_PASSWORD=SecretPassword
+      - OPENSEARCH_SSL_VERIFICATIONMODE=none # 同樣關閉 SSL 校驗
+    ports:
+      - "443:5601"
+    networks:
+      - wazuh-net
+
+networks:
+  wazuh-net:
+    driver: bridge
