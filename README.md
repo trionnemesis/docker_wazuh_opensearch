@@ -8,7 +8,7 @@
 
 ### 系統流程圖
 
-```mermaid
+```
 graph TD
     subgraph A[主機 Host]
         subgraph B[Docker 環境]
