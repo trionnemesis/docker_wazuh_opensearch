@@ -1,7 +1,7 @@
 ## 日誌分析與告警系統 (基於 Gemini 與 LangChain)
 Wazuh-LangChain：AI 驅動的現代化安全監控平台
 本專案旨在建立一個全容器化、易於管理，並具備 AI 互動能力的 Wazuh 安全監控平台。透過 Docker Compose 將 OpenSearch、Wazuh Manager 與 Wazuh Dashboard 整合為單一服務堆疊，並提供一個 Python/LangChain 介面，讓使用者能以自然語言對 Wazuh 系統進行查詢與操作。
-```mermaid
+```
 graph TD
     subgraph A[主機 Host]
         subgraph B[Docker 環境]
